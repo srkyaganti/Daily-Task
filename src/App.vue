@@ -30,7 +30,49 @@
       <div class="column">
         <button
           class="button is-success wide"
-          @click="saveData">Save</button>
+          @click="saveData">
+          Save
+        </button>
+        <button
+          v-if="!isDeleteModalActive"
+          class="button is-danger wide"
+          @click="isDeleteModalActive = !isDeleteModalActive">
+            Delete
+        </button>
+      </div>
+    </div>
+    <div v-if="isDeleteModalActive" class="columns">
+      <div class="column"></div>
+      <div class="column">
+        <b-field label="Select start date">
+          <b-datepicker
+            placeholder="Click to select..."
+            v-model="startDate">
+          </b-datepicker>
+        </b-field>
+      </div>
+      <div class="column">
+        <b-field label="Select end date">
+          <b-datepicker
+            placeholder="Click to select..."
+            v-model="endDate">
+          </b-datepicker>
+        </b-field>
+      </div>
+      <div class="column"></div>
+    </div>
+    <div v-if="isDeleteModalActive" class="columns" align="center">
+      <div class="column">
+        <button
+          class="button is-outlined wide"
+          @click="isDeleteModalActive = !isDeleteModalActive">
+            Cancel
+        </button>
+        <button
+          class="button is-danger wide"
+          @click="deleteData">
+            Delete
+        </button>
       </div>
     </div>
     <div class="columns">
@@ -133,11 +175,7 @@
                     width="100">
                       <b-input v-model="props.row.actionBy"></b-input>
                   </b-table-column>
-                  <b-table-column 
-                    label="Action" 
-                    width="100">
-                      <b-input v-model="props.row.actionBy"></b-input>
-                  </b-table-column>
+
                   <b-table-column 
                     label="" 
                     width="30">
@@ -306,6 +344,9 @@ export default {
     let taskId = -1
     let date = new Date()
     date.setHours(0, 0, 0, 0)
+    let previousDate = date
+    let startDate = new Date()
+    let endDate = new Date()
 
     return {
       notes,
@@ -318,10 +359,16 @@ export default {
       isLoading: isLoading,
       noteId,
       eventId,
-      taskId
+      taskId,
+      previousDate,
+      isDeleteModalActive: false,
+      startDate,
+      endDate
     }
   },
-  mounted () { this.getData() },
+  mounted () {
+    this.getData()
+  },
   methods: {
     addNote () {
       this.notes.push(new Note(++this.noteId))
@@ -350,7 +397,9 @@ export default {
       this.date = today
     },
     getData () {
-      firebase.database().ref(this.date.toString()).once('value')
+      let requiredDate = this.date.getDate() + '-' + (this.date.getMonth() + 1) + '-' + this.date.getFullYear()
+
+      firebase.database().ref(requiredDate).once('value')
       .then(response => {
         this.notes = response.val().notes || []
         this.events = response.val().events || []
@@ -387,7 +436,10 @@ export default {
     },
     saveData () {
       this.isLoading = true
-      firebase.database().ref(this.date.toString()).set({
+
+      let requiredDate = this.date.getDate() + '-' + (this.date.getMonth() + 1) + '-' + this.date.getFullYear()
+
+      firebase.database().ref(requiredDate).set({
         notes: this.notes,
         events: this.events,
         tasks: this.tasks
@@ -402,39 +454,110 @@ export default {
       })
       .catch(error => {
         console.log(error)
-        window.alert('error occured')
         this.isLoading = false
       })
+    },
+    deleteData () {
+      this.startDate.setHours(0, 0, 0, 0)
+      this.endDate.setHours(0, 0, 0, 0)
+
+      let currentWorkingDate = this.date.getDate() + '-' + (this.date.getMonth() + 1) + '-' + this.date.getFullYear()
+
+      for (let date = this.startDate; date <= this.endDate;) {
+        let requiredDate = date.getDate() + '-' + (date.getMonth() + 1) + '-' + date.getFullYear()
+
+        if (currentWorkingDate === requiredDate) {
+          this.notes = []
+          this.events = []
+          this.tasks = []
+
+          this.noteId = 0
+          this.eventId = 0
+          this.taskId = 0
+        }
+
+        firebase.database().ref(requiredDate).set({})
+        .then(response => console.log(response))
+        .catch(error => console.log(error))
+
+        date.setDate(date.getDate() + 1)
+      }
     }
   },
   watch: {
     date () {
       this.isLoading = true
-      firebase.database().ref(this.date.toString()).once('value')
+      // Saving data
+      let requiredDate = this.previousDate.getDate() + '-' + (this.previousDate.getMonth() + 1) + '-' + this.previousDate.getFullYear()
+
+      firebase.database().ref(requiredDate).set({
+        notes: this.notes,
+        events: this.events,
+        tasks: this.tasks
+      })
       .then(response => {
-        this.notes = response.val().notes || []
-        this.events = response.val().events || []
-        this.tasks = response.val().tasks || []
+        console.log('write successful')
 
-        this.noteId = this.notes.length
-        this.eventId = this.events.length
-        this.taskId = this.tasks.length
+        this.$toast.open({
+          message: 'Data saved!',
+          type: 'is-success'
+        })
 
+        this.previousDate = this.date
+
+        requiredDate = this.date.getDate() + '-' + (this.date.getMonth() + 1) + '-' + this.date.getFullYear()
+
+        firebase.database().ref(requiredDate).once('value')
+        .then(response => {
+          this.notes = response.val().notes || []
+          this.events = response.val().events || []
+          this.tasks = response.val().tasks || []
+
+          this.noteId = this.notes.length
+          this.eventId = this.events.length
+          this.taskId = this.tasks.length
+        })
+        .catch(error => {
+          // if date does not exist initialize empty lists
+          this.notes = []
+          this.events = []
+          this.tasks = []
+
+          this.noteId = 0
+          this.eventId = 0
+          this.taskId = 0
+
+          console.log(error)
+        })
         this.isLoading = false
       })
       .catch(error => {
-        // if date does not exist initialize empty lists
-        this.notes = []
-        this.events = []
-        this.tasks = []
-
-        this.noteId = 0
-        this.eventId = 0
-        this.taskId = 0
-
-        this.isLoading = false
-
         console.log(error)
+
+        this.previousDate = this.date
+
+        firebase.database().ref(this.date.toString()).once('value')
+        .then(response => {
+          this.notes = response.val().notes || []
+          this.events = response.val().events || []
+          this.tasks = response.val().tasks || []
+
+          this.noteId = this.notes.length
+          this.eventId = this.events.length
+          this.taskId = this.tasks.length
+        })
+        .catch(error => {
+          console.log(error)
+          // if date does not exist initialize empty lists
+          this.notes = []
+          this.events = []
+          this.tasks = []
+
+          this.noteId = 0
+          this.eventId = 0
+          this.taskId = 0
+        })
+        this.isLoading = false
       })
     }
   }
