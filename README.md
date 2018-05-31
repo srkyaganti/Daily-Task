@@ -1,6 +1,6 @@
-# dubbi-todo
+# Daily Task
 
-> A list manager for Dumbu's college
+> A list manager for Blue Mountains, Australia
 
 ## Build Setup
 
